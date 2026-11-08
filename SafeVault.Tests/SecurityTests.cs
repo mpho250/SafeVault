@@ -1,4 +1,5 @@
 
+using System.Security.Claims;
 using System.Text.Encodings.Web;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
@@ -9,7 +10,7 @@ namespace SafeVault.Tests;
 
 public class SecurityTests
 {
-    // Test 1: Valid email addresses
+    // 1. Test valid email addresses
     [Theory]
     [InlineData("user@example.com")]
     [InlineData("student@university.ac.za")]
@@ -22,48 +23,51 @@ public class SecurityTests
         Assert.True(result);
     }
 
-    // Test 2: Invalid email addresses
+    // 2. Test invalid email addresses
     [Theory]
     [InlineData("invalid-email")]
     [InlineData("user@")]
     [InlineData("")]
     public void InvalidEmail_ShouldFail(string email)
     {
-        bool result = Regex.IsMatch(
-            email,
-            @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
+        bool result = !string.IsNullOrWhiteSpace(email)
+            && Regex.IsMatch(
+                email,
+                @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
 
         Assert.False(result);
     }
 
-    // Test 3: Weak passwords should be rejected
+    // 3. Test weak password rejection
     [Theory]
     [InlineData("12345")]
     [InlineData("password")]
     [InlineData("")]
     public void WeakPassword_ShouldFail(string password)
     {
-        bool result = !string.IsNullOrWhiteSpace(password)
-                      && password.Length >= 12
-                      && password.Length <= 128;
+        bool result =
+            !string.IsNullOrWhiteSpace(password)
+            && password.Length >= 12
+            && password.Length <= 128;
 
         Assert.False(result);
     }
 
-    // Test 4: Strong passwords should pass
+    // 4. Test strong password acceptance
     [Theory]
     [InlineData("SecurePassword123!")]
     [InlineData("MyStrongPassword456")]
     public void StrongPassword_ShouldPass(string password)
     {
-        bool result = !string.IsNullOrWhiteSpace(password)
-                      && password.Length >= 12
-                      && password.Length <= 128;
+        bool result =
+            !string.IsNullOrWhiteSpace(password)
+            && password.Length >= 12
+            && password.Length <= 128;
 
         Assert.True(result);
     }
 
-    // Test 5: Passwords should be hashed
+    // 5. Test password hashing
     [Fact]
     public void Password_ShouldBeHashed()
     {
@@ -72,7 +76,8 @@ public class SecurityTests
 
         string password = "SecurePassword123!";
 
-        string hashedPassword = hasher.HashPassword(user, password);
+        string hashedPassword =
+            hasher.HashPassword(user, password);
 
         Assert.NotEqual(password, hashedPassword);
 
@@ -83,7 +88,7 @@ public class SecurityTests
             PasswordVerificationResult.Failed, result);
     }
 
-    // Test 6: Incorrect password should fail verification
+    // 6. Test incorrect password rejection
     [Fact]
     public void IncorrectPassword_ShouldFail()
     {
@@ -100,7 +105,7 @@ public class SecurityTests
             PasswordVerificationResult.Failed, result);
     }
 
-    // Test 7: SQL injection should not bypass parameterized query
+    // 7. Test SQL injection prevention
     [Fact]
     public async Task SqlInjection_ShouldNotReturnAllUsers()
     {
@@ -132,13 +137,13 @@ public class SecurityTests
         command.Parameters.AddWithValue(
             "$email", "' OR '1'='1");
 
-        var result = Convert.ToInt32(
+        int result = Convert.ToInt32(
             await command.ExecuteScalarAsync());
 
         Assert.Equal(0, result);
     }
 
-    // Test 8: XSS input should be HTML encoded
+    // 8. Test XSS prevention
     [Fact]
     public void XssInput_ShouldBeEncoded()
     {
@@ -152,29 +157,56 @@ public class SecurityTests
         Assert.Contains("&lt;script&gt;", safeOutput);
     }
 
-    // Test 9: Normal text should remain readable
+    // 9. Test normal input handling
     [Fact]
     public void NormalInput_ShouldRemainReadable()
     {
         string input = "Welcome to SafeVault";
 
-        string output = HtmlEncoder.Default.Encode(input);
+        string output =
+            HtmlEncoder.Default.Encode(input);
 
         Assert.Equal(input, output);
     }
 
-    // Test 10: User roles should be distinct
+    // 10. Test user role
     [Fact]
-    public void UserAndAdmin_ShouldHaveDifferentRoles()
+    public void User_ShouldHaveUserRole()
     {
-        string userRole = "User";
-        string adminRole = "Admin";
+        var identity = new ClaimsIdentity(
+            new[]
+            {
+                new Claim(ClaimTypes.Role, "User")
+            },
+            "TestAuthentication");
 
-        Assert.NotEqual(userRole, adminRole);
+        var principal = new ClaimsPrincipal(identity);
+
+        Assert.True(principal.IsInRole("User"));
+        Assert.False(principal.IsInRole("Admin"));
     }
 
+    // 11. Test administrator role
+    [Fact]
+    public void Admin_ShouldHaveAdminRole()
+    {
+        var identity = new ClaimsIdentity(
+            new[]
+            {
+                new Claim(ClaimTypes.Role, "Admin")
+            },
+            "TestAuthentication");
+
+        var principal = new ClaimsPrincipal(identity);
+
+        Assert.True(principal.IsInRole("Admin"));
+        Assert.False(principal.IsInRole("User"));
+    }
+
+    // Test user model
     public class TestUser
     {
-        public string Email { get; set; } = "test@example.com";
+        public string Email { get; set; } =
+            "test@example.com";
     }
 }
